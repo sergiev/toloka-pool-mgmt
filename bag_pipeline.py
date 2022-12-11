@@ -14,20 +14,14 @@ if __name__ == "__main__":
     print(tc.get_requester())
     dpid = "36743071"
     vpid = "36799000"
-    vsid = "57272"
-    detection_pool = tc.get_pool(dpid)
-    verification_pool = tc.get_pool(vpid)
-    verification_skill = tc.get_skill(vsid)
 
-    dsh = DetectionSubmittedHandler(
-        tc, detection_pool_id=dpid, verification_pool_id=vpid
-    )
+    dsh = DetectionSubmittedHandler(client=tc, verification_pool_id=vpid)
     vdh = VerificationDoneHandler(
-        tc, general_tasks_in_suite=GENERAL_TASKS_IN_DETECTION_SUITE
+        client=tc, general_tasks_in_suite=GENERAL_TASKS_IN_DETECTION_SUITE
     )
-
+    # DSH should ignore suits that already went to verification
     passed_detection_assignment_ids = set()
-    # ignore images that already processed, i.e. accepted/rejected in detection stage
+    # VDH should ignore images that already processed, i.e. accepted/rejected in detection stage
     verification_ignore_paths = set()
 
     while True:
