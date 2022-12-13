@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Dict, List
 
-IOU_THD = 0.5
+IOU_THD = 0.6
 
 
 def intersection(amin, amax, bmin, bmax):
@@ -37,7 +37,7 @@ def group_by_label(a: List) -> Dict[str, List]:
     return result
 
 
-def tp_fp_fn(gt, guess, iou_thd=0.5):
+def tp_fp_fn(gt, guess, iou_thd=IOU_THD):
     # calculate numbers of true positive and false positive/negative boxes in single label
     tp = 0
 

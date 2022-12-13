@@ -1,31 +1,38 @@
 from collections import defaultdict
-from typing import List
+from typing import Sequence
 
 import pandas as pd  # To perform data manipulation
 from crowdkit.aggregation import MajorityVote
+from toloka.client import TolokaClient
 from toloka.client.assignment import Assignment
+from tqdm import tqdm
 
 # class for handling accepted tasks in the verification pool
 class VerificationDoneHandler:
-    def __init__(self, client, general_tasks_in_suite):
+    def __init__(self, client: TolokaClient, general_tasks_in_suite: int):
         self.client = client
         self.blacklist = set()
-        self.assignment_counter = defaultdict(
-            lambda: {"accepted": 0, "rejected": 0, "total": general_tasks_in_suite}
+        self.assignment_summary = defaultdict(
+            lambda: {
+                "accepted": set(),
+                "rejected": False,
+                "total": general_tasks_in_suite,
+            }
         )
         self.path_to_assignment = dict()
 
-    def update_blacklist(self, image_paths: set):
-        self.blacklist.update(image_paths)
-
     # get the data necessary for aggregation
-    def as_frame(self, assignments: List[Assignment]) -> pd.DataFrame:
+    def as_frame(self, assignments: Sequence[Assignment]) -> pd.DataFrame:
         microtasks = []
 
         for assignment in assignments:
             for task, solution in zip(assignment.tasks, assignment.solutions):
                 image_path = task.input_values["image"]
-                if task.known_solutions is None and image_path not in self.blacklist:
+                detection_suite_id = task.input_values["assignment_id"]
+                if (
+                    task.known_solutions is None
+                    and detection_suite_id not in self.blacklist
+                ):
                     microtasks.append(
                         (
                             image_path,  # task
@@ -33,15 +40,12 @@ class VerificationDoneHandler:
                             assignment.user_id,  # worker
                         )
                     )
-                    self.path_to_assignment[image_path] = task.input_values[
-                        "assignment_id"
-                    ]
+                    self.path_to_assignment[image_path] = detection_suite_id
 
         return pd.DataFrame(microtasks, columns=["task", "label", "worker"])
 
     # filter out tasks that already have enough overlap and aggregate the result
-    def __call__(self, assignments: List[Assignment]) -> None:
-        handle_task_counter = {"accepted": 0, "rejected": 0}
+    def __call__(self, assignments: Sequence[Assignment]) -> None:
         # Initializing data
         microtasks = self.as_frame(assignments)
 
@@ -53,21 +57,31 @@ class VerificationDoneHandler:
         ).fit_predict(to_aggregate, None)
 
         # Accepting or rejecting assignments
-        for image_path, result in aggregated.items():
+        handle_task_counter = {"accepted": 0, "rejected": 0}
+        for image_path, result in tqdm(aggregated.items()):
             assignment_id = self.path_to_assignment[image_path]
-            counter = self.assignment_counter[assignment_id]
+            if assignment_id in self.blacklist:
+                continue
+            summary = self.assignment_summary[assignment_id]
             if result == "OK":
-                counter["accepted"] += 1
-                if counter["accepted"] == counter["total"]:
+                summary["accepted"].add(image_path)
+                if len(summary["accepted"]) == summary["total"]:
                     self.client.accept_assignment(assignment_id, "Well done!")
-                    handle_task_counter["accepted"] += counter["total"]
-            else:
-                if counter["rejected"] == 0:  # prevent repeated rejection
-                    self.client.reject_assignment(
-                        assignment_id,
-                        f"Some objects in {assignment_id} weren't selected or were selected incorrectly.",
-                    )
-                    handle_task_counter["rejected"] += counter["total"]
-                counter["rejected"] += 1
+                    handle_task_counter["accepted"] += summary["total"]
+                    self.blacklist.add(assignment_id)
+
+            # prevent repeated rejection
+            elif not summary["rejected"]:
+                public_comment = (
+                    "Majority of 5 verificators decided that some objects in "
+                    + "this suite weren't selected or were selected incorrectly."
+                )
+                self.client.reject_assignment(
+                    assignment_id,
+                    public_comment,
+                )
+                handle_task_counter["rejected"] += summary["total"]
+                summary["rejected"] = True
+                self.blacklist.add(assignment_id)
         # Updating mictotasks
         print("Verification results, tasks:", handle_task_counter)

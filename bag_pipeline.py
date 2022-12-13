@@ -21,8 +21,6 @@ if __name__ == "__main__":
     )
     # DSH should ignore suits that already went to verification
     passed_detection_assignment_ids = set()
-    # VDH should ignore images that already processed, i.e. accepted/rejected in detection stage
-    verification_ignore_paths = set()
 
     while True:
         start = time.time()
@@ -46,19 +44,16 @@ if __name__ == "__main__":
         )
         dsh(unprocessed_detection_assignments)
 
-        # handle accepted verifications (which are not already handled)
-        processed_detection_assignments = list(
-            tc.get_assignments(pool_id=dpid, status="REJECTED")
-        ) + list(tc.get_assignments(pool_id=dpid, status="ACCEPTED"))
 
-        for assignment in processed_detection_assignments:
-            for task in assignment.tasks:
-                verification_ignore_paths.add(task.input_values["image"])
+         # VDH should ignore detection stage assignments that are already accepted/rejected
+        for assignment in tc.get_assignments(pool_id=dpid, status="REJECTED"):
+            vdh.blacklist.add(assignment.id)
+        for assignment in tc.get_assignments(pool_id=dpid, status="ACCEPTED"):
+            vdh.blacklist.add(assignment.id)
 
         accepted_verification_assignments = list(
             tc.get_assignments(pool_id=vpid, status="ACCEPTED")
         )
-        vdh.update_blacklist(verification_ignore_paths)
         print(
             f"Verification pool handling starts: {len(accepted_verification_assignments)} suites"
         )
