@@ -43,7 +43,7 @@ def group_by_label(a: List) -> Dict[str, List]:
 
 def tp_fp_fn(gt: list, guess: list, iou_thd=IOU_THD, strict=False):
     """
-    calculate numbers of true positive and false positive/negative boxes in single label
+    calculate numbers of true positive and false positive/negative boxes
 
     Parameters
     ----------
