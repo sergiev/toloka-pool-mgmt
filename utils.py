@@ -1,5 +1,6 @@
 from collections import defaultdict
 from typing import Dict, List
+from copy import deepcopy
 
 IOU_THD = 0.6
 
@@ -31,20 +32,42 @@ def iou(a: Dict, b: Dict):  # a, b: xmin, ymin, w, h
 
 
 def group_by_label(a: List) -> Dict[str, List]:
+    if "label" not in a[0]:
+        return {'all': a}
     result = defaultdict(list)
     for i in a:
         result[i["label"]].append(i)
     return result
 
 
-def tp_fp_fn(gt, guess, iou_thd=IOU_THD):
-    # calculate numbers of true positive and false positive/negative boxes in single label
-    tp = 0
 
+def tp_fp_fn(gt: list, guess: list, iou_thd=IOU_THD, strict=False):
+    """
+    calculate numbers of true positive and false positive/negative boxes in single label
+
+    Parameters
+    ----------
+    gt : list
+        ground-truth instances
+    guess : list
+        instances to compare ground-truth with
+    iou_thd : float, optional
+        intersection-over-union threshold
+    strict : bool, optional
+        if set to false, one guess could be taken as true positive for more than one ground-truth
+    Returns
+    -------
+    tuple
+        number of true positives, false positives and false negatives respectively
+    """
+    tp = 0
+    _guess = deepcopy(guess)  # to prevent modification of original
     for gt_box in gt:
-        for guess_box in guess:
+        for i, guess_box in enumerate(_guess):
             if iou(gt_box, guess_box) > iou_thd:
                 tp += 1
+                if strict:
+                    del _guess[i]
                 break
 
     fp = len(guess) - tp

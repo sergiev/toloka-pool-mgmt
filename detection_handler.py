@@ -4,6 +4,7 @@ import toloka.client as toloka
 import utils
 from toloka.client.assignment import Assignment
 from tqdm import tqdm
+import datetime
 
 FSCORE_THD = 0.8
 
@@ -13,9 +14,11 @@ class DetectionSubmittedHandler:
         self,
         client: toloka.TolokaClient,
         verification_pool_id: str,
+        ignore_filename: List = ()
     ):
         self.client = client
         self.verification_pool_id = verification_pool_id
+        self.ignore_filename = set(ignore_filename)
 
     # reject assignment and restrict worker from any further assignments
     def rejection(self, assignment: Assignment, input_image_path: str):
@@ -24,6 +27,7 @@ class DetectionSubmittedHandler:
             toloka.user_restriction.AllProjectsUserRestriction(
                 user_id=assignment.user_id,
                 private_comment=f"{reason}: {input_image_path}",
+                will_expire=datetime.datetime.utcnow() + datetime.timedelta(days=1)
             )
         )
         self.client.reject_assignment(
@@ -38,6 +42,8 @@ class DetectionSubmittedHandler:
             noncontrol_tasks = []
             for task, solution in zip(assignment.tasks, assignment.solutions):
                 input_image_path = task.input_values["image"]
+                if input_image_path.split('/')[-1] in self.ignore_filename:
+                    continue
                 if task.known_solutions is None:
                     task_content = {
                         "image": input_image_path,
